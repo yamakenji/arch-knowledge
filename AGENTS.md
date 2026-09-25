@@ -148,10 +148,11 @@ Run from the repository root. Confirm the wrapper, module paths, and available t
 On macOS/Linux use `./gradlew` with the same arguments. Confirm what `check` includes; integration tests and style checks may need separate tasks.
 
 ```text
-JDK setup:                  <document Java 25 installation / JAVA_HOME>
-Formatting/static analysis: <actual configured task, or not configured>
+JDK setup:                  JDK 25 on PATH or JAVA_HOME (verified: Corretto 25.0.3); wrapper = Gradle 9.6.1
+Formatting/static analysis: not configured
 Neo4j integration tests:    <actual task and infrastructure prerequisites>
-Run MVP example:           <actual CLI task and fixture arguments>
+Run MVP example:           ./gradlew :applications:cli:run --args="impact cap-order-management [--depth N]"
+                           ./gradlew :applications:cli:run --args="concepts"
 Local infrastructure:      <actual compose file and startup command, if added>
 LLM configuration:         <provider/model and environment variable NAMES only>
 ```
