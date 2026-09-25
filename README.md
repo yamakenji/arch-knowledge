@@ -6,8 +6,69 @@
 
 Business Analyst、Architect、AI Agent が同じ知識基盤を参照し、「ある Capability を変更すると何に影響するか」を、自然言語と根拠となるグラフの両方から確認できる環境を目指します。
 
-> **Status: Concept / Early Prototype**  
-> この README は初期構想と実装方針を示します。以下の構成、API、機能は提案であり、実装済みであることを意味しません。セットアップ手順、対応バージョン、ライセンスは今後確定します。
+> **Status: Early Prototype**  
+> 現在実装されているのは、インメモリの企業モデルに対する決定的な影響分析と、それを実行する CLI だけです（[現在の実装](#現在の実装)を参照）。Neo4j、LLM、Quarkus、UI、RDF / OWL / SHACL は未実装で、以下のうちそれらに関する記述は構想です。ライセンスは未定です。
+
+## 現在の実装
+
+### 目的
+
+「この Capability を変更すると、何に影響する可能性があるか」という問いに、登録済みの関係だけを根拠として答えます。Core は Capability などのドメイン概念を持たない汎用のグラフと影響分析で構成し、ドメイン概念は Profile で定義します。LLM やデータベースを使わずに、決定的に動作します。
+
+### 構成
+
+| モジュール | 役割 |
+| --- | --- |
+| `core/` | 汎用モデル（Concept / Relation / Schema）、`ConceptGraph` ポートとインメモリ実装、影響分析 `ImpactAnalyzer`。依存は kotlin-stdlib のみ |
+| `application/` | ユースケース `AnalyzeImpact`（既定の探索設定の適用、要求の検証） |
+| `profiles/business-software/` | Capability / BusinessProcess / Application / BoundedContext と、REALIZED_BY / SUPPORTED_BY / IMPLEMENTS の定義、既定の探索設定 |
+| `examples/order-management/` | 架空の Order Management データと期待結果（[README](examples/order-management/README.md)） |
+| `applications/cli/` | CLI（各モジュールの組み立てと結果の表示） |
+| `docs/adr/` | 設計判断（すべて Proposed） |
+
+依存は内向きのみです（application / profiles → core、examples → core・profiles、cli → すべて）。設計判断は次の ADR にまとめています。
+
+- [0001 メタモデル非依存の Core と初期モジュール構成](docs/adr/0001-metamodel-agnostic-core-and-module-layout.md)
+- [0002 影響分析のトラバーサルと根拠経路の意味論](docs/adr/0002-impact-traversal-and-evidence-semantics.md)
+- [0003 Kotlin/JVM ツールチェーンとビルド構成](docs/adr/0003-kotlin-jvm-toolchain.md)
+
+### 影響分析の意味論（要約）
+
+- 関係は `source -> target` の向きで保存します。Profile の既定の探索は、3 つの関係型を保存方向（`OUTGOING`）に最大深さ 3 まで辿ります。
+- 開始 Concept は影響先に含めず、別に表示します。
+- 長さが最大深さ以下の単純経路（同じ Concept を再訪しない経路）をすべて根拠として返します。経路は relation ID の並びで重複を除きます。
+- 循環は経路の終端として扱い、「不完全」にはしません。深さ制限によって延長できる経路を打ち切った場合に限り、結果を **INCOMPLETE** と表示します。
+- 並び順は（距離、型、ID）、経路の順は（長さ、relation ID の並び）で、入力の順序には依存しません。
+- 開始 ID が存在しない場合は、明示的なエラーとして返します。到達先がない場合も「影響なし」とは断定しません。
+
+詳細は [ADR 0002](docs/adr/0002-impact-traversal-and-evidence-semantics.md) を参照してください。
+
+### 必要な環境
+
+- JDK 25（`JAVA_HOME` を JDK 25 に設定するか、`PATH` 上の `java` を JDK 25 にする）。Amazon Corretto 25.0.3 で確認しています。
+- Gradle は同梱の Wrapper（9.6.1）を使います。別途インストールする必要はありません。
+
+### 実行方法
+
+```bash
+./gradlew :applications:cli:run --args="concepts"
+./gradlew :applications:cli:run --args="impact cap-order-management"
+./gradlew :applications:cli:run --args="impact cap-order-management --depth 2"
+```
+
+Windows では `.\gradlew.bat` を使います。`./gradlew :applications:cli:installDist` を実行すると、`applications/cli/build/install/arch-knowledge/bin/arch-knowledge` から直接実行できます。
+
+終了コードは、成功が `0`、Concept が存在しない場合や要求が不正な場合が `1`、引数の誤りが `2` です。
+
+### テスト方法
+
+```bash
+./gradlew test           # 全モジュールのテスト
+./gradlew build          # コンパイル + テスト（check を含む）
+./gradlew :core:test     # モジュール単位（:application, :profiles:business-software, :examples:order-management, :applications:cli）
+```
+
+フォーマッタや静的解析は、まだ設定していません。
 
 ## Vision
 
@@ -96,7 +157,7 @@ flowchart LR
 | `BusinessProcess -[:SUPPORTED_BY]-> Application` | Business Process は Application によって支援される |
 | `Application -[:IMPLEMENTS]-> BoundedContext` | Application は Bounded Context の実装を担う |
 
-関係名と方向は初期案です。各関係は複数対複数を許容し、Application と Bounded Context を一対一とみなしません。Bounded Context はデプロイ単位と同義ではありません。
+関係名と方向は、この初期案のまま business-software Profile に実装しています（保存方向は矢印の向きです。[ADR 0002](docs/adr/0002-impact-traversal-and-evidence-semantics.md) を参照。Proposed）。各関係は複数対複数を許容し、Application と Bounded Context を一対一とみなしません。Bounded Context はデプロイ単位と同義ではありません。
 
 各要素には、表示名から独立した安定 ID、名前、説明、出典を持たせる想定です。関係にも出典と更新情報を保持し、未登録の関係と「関係がない」状態を区別する方針です。
 
@@ -151,65 +212,30 @@ MVP の「影響分析」は、登録された関係に基づく影響候補の�
 | RDF / OWL | 語彙と意味モデルの定義 |
 | SHACL | グラフデータの制約・品質検証 |
 
-3 言語の併用自体を目的にせず、MVP は Java を中心に最小構成で始めます。Kotlin / Scala 3 は、必要性と相互運用性を確認して導入します。LLM Provider、ビルドツール、UI 技術、RDF 処理ライブラリは未定です。
+3 言語の併用自体を目的にせず、最小構成で始めます。現在の実装は Kotlin 2.3.21 / Java 25 ツールチェーン / Gradle 9.6.1（Kotlin DSL）です（[ADR 0003](docs/adr/0003-kotlin-jvm-toolchain.md)、Proposed）。Quarkus、Neo4j、LangChain4j、RDF / OWL / SHACL はまだ導入していません。Scala 3 は必要性が明確になってから検討します。LLM Provider、UI 技術、RDF 処理ライブラリは未定です。
 
-## Proposed Repository Structure
+## Repository Structure
 
-初期は単一リポジトリを想定します。以下は作成予定の構成であり、各ディレクトリが存在することを保証するものではありません。
-
-```text
-arch-knowledge/
-├── README.md
-├── docs/
-│   ├── architecture/       # 全体構成とユースケース
-│   └── decisions/          # Architecture Decision Records
-├── ontology/
-│   ├── vocabulary/         # RDF / OWL の語彙定義
-│   └── shapes/             # SHACL 制約
-├── modules/
-│   ├── domain/             # ドメインモデルと識別子
-│   ├── ingestion/          # 取り込み、マッピング、検証
-│   ├── graph/              # Neo4j アクセスと検索
-│   ├── agent/              # LangChain4j と回答生成
-│   └── api/                # Quarkus の起動・API
-├── examples/
-│   ├── data/               # 公開可能な架空企業データ
-│   └── queries/            # 質問例と期待する検索結果
-├── tests/
-│   └── acceptance/         # Vertical Slice の受け入れ検証
-└── infra/                  # ローカル開発環境の構成
-```
-
-モジュール分割は責務を明確にするための案です。独立したサービスや、言語ごとの分割を意味しません。
+現在のモジュールは[現在の実装](#現在の実装)に記載しています。今後の目標構成は [AGENTS.md](AGENTS.md) の "Intended layout" に従います（`adapters/neo4j/`、`adapters/llm-langchain4j/`、`applications/server/`、`deployment/` など）。これらは必要になった時点で追加し、空のモジュールを先に作ることはしません。
 
 ## Getting Started
 
-**実行可能なセットアップ手順は準備中です。現時点ではコピーして実行できる起動コマンドを提供していません。**
-
-実装後は、次の流れで最初の質問まで試せる状態を目指します。
-
-1. JDK 25 と、確定したビルド・ローカル実行環境を用意する。
-2. Neo4j を起動し、接続情報を設定する。
-3. LLM Provider と認証情報を設定する。
-4. サンプルデータを検証して読み込む。
-5. アプリケーションを起動し、Capability の影響分析を実行する。
-
-今後、ビルド用 Wrapper、環境変数のサンプル、起動手順、サンプル質問と期待結果を追加します。認証情報はリポジトリに含めず、サンプルには架空データを使います。
+インメモリの影響分析は、[実行方法](#実行方法)の手順でそのまま試せます。Neo4j、LLM Provider、認証情報の設定手順は、それらの統合を実装した時点で追加します。認証情報はリポジトリに含めず、サンプルには架空のデータを使います。
 
 ## Roadmap / MVP
 
 ### 1. モデルの定義
 
-- [ ] 4 要素と 3 関係の語彙・意味を定義する。
-- [ ] 安定 ID、出典、更新情報の扱いを決める。
+- [x] 4 要素と 3 関係の語彙・意味を定義する（business-software Profile。ADR は Proposed）。
+- [ ] 安定 ID、出典、更新情報の扱いを決める（安定 ID と出典の文字列は実装済み。更新情報は未定）。
 - [ ] RDF / OWL と Property Graph のマッピングを定義する。
-- [ ] 最小限の SHACL 制約と架空企業データを用意する。
+- [ ] 最小限の SHACL 制約と架空企業データを用意する（架空データと、Core による型・端点の検証は実装済み。SHACL は未実装）。
 
 ### 2. グラフの取り込み・検索
 
-- [ ] 検証付きのサンプルデータ取り込みを実装する。
-- [ ] Capability を起点とする読み取り専用検索を実装する。
-- [ ] 到達要素と根拠経路を返す API を用意する。
+- [ ] 検証付きのサンプルデータ取り込みを実装する（インメモリのデータを Profile で検証する部分は実装済み。ファイルや Neo4j からの取り込みは未実装）。
+- [x] Capability を起点とする読み取り専用検索を実装する（インメモリ。Neo4j は未実装）。
+- [ ] 到達要素と根拠経路を返す API を用意する（ユースケースと CLI は実装済み。サーバー API は未実装）。
 
 ### 3. 自然言語による問い合わせ
 
