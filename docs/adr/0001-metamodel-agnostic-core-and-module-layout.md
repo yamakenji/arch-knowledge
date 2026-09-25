@@ -1,6 +1,6 @@
 # 0001. メタモデル非依存の Core と初期モジュール構成
 
-- Status: Proposed
+- Status: Accepted（2026-09-25、PR #1 の承認をもって人間の Architect が承認）
 - Date: 2026-09-25
 
 ## Context

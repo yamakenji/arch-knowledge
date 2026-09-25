@@ -24,7 +24,7 @@ Business Analyst、Architect、AI Agent が同じ知識基盤を参照し、「�
 | `profiles/business-software/` | Capability / BusinessProcess / Application / BoundedContext と、REALIZED_BY / SUPPORTED_BY / IMPLEMENTS の定義、既定の探索設定 |
 | `examples/order-management/` | 架空の Order Management データと期待結果（[README](examples/order-management/README.md)） |
 | `applications/cli/` | CLI（各モジュールの組み立てと結果の表示） |
-| `docs/adr/` | 設計判断（すべて Proposed） |
+| `docs/adr/` | 設計判断（0001〜0003 は Accepted） |
 
 依存は内向きのみです（application / profiles → core、examples → core・profiles、cli → すべて）。設計判断は次の ADR にまとめています。
 
@@ -157,7 +157,7 @@ flowchart LR
 | `BusinessProcess -[:SUPPORTED_BY]-> Application` | Business Process は Application によって支援される |
 | `Application -[:IMPLEMENTS]-> BoundedContext` | Application は Bounded Context の実装を担う |
 
-関係名と方向は、この初期案のまま business-software Profile に実装しています（保存方向は矢印の向きです。[ADR 0002](docs/adr/0002-impact-traversal-and-evidence-semantics.md) を参照。Proposed）。各関係は複数対複数を許容し、Application と Bounded Context を一対一とみなしません。Bounded Context はデプロイ単位と同義ではありません。
+関係名と方向は、この初期案のまま business-software Profile に実装しています（保存方向は矢印の向きです。[ADR 0002](docs/adr/0002-impact-traversal-and-evidence-semantics.md) を参照。Accepted）。各関係は複数対複数を許容し、Application と Bounded Context を一対一とみなしません。Bounded Context はデプロイ単位と同義ではありません。
 
 各要素には、表示名から独立した安定 ID、名前、説明、出典を持たせる想定です。関係にも出典と更新情報を保持し、未登録の関係と「関係がない」状態を区別する方針です。
 
@@ -203,8 +203,8 @@ MVP の「影響分析」は、登録された関係に基づく影響候補の�
 
 | 技術 | 想定する役割 |
 | --- | --- |
-| Java 25 | JVM 実行基盤、主要なアプリケーション実装 |
-| Kotlin | JVM 上のサービス実装やモデル記述の選択肢 |
+| Java 25 | JVM 実行基盤（ツールチェーン） |
+| Kotlin | 主要な実装言語（Core、Profile、Application、CLI） |
 | Scala 3 | 型を活用したモデリング・変換処理の選択肢 |
 | Quarkus | API とアプリケーションの実行基盤 |
 | Neo4j | Property Graph の保存と関係探索 |
@@ -212,7 +212,7 @@ MVP の「影響分析」は、登録された関係に基づく影響候補の�
 | RDF / OWL | 語彙と意味モデルの定義 |
 | SHACL | グラフデータの制約・品質検証 |
 
-3 言語の併用自体を目的にせず、最小構成で始めます。現在の実装は Kotlin 2.3.21 / Java 25 ツールチェーン / Gradle 9.6.1（Kotlin DSL）です（[ADR 0003](docs/adr/0003-kotlin-jvm-toolchain.md)、Proposed）。Quarkus、Neo4j、LangChain4j、RDF / OWL / SHACL はまだ導入していません。Scala 3 は必要性が明確になってから検討します。LLM Provider、UI 技術、RDF 処理ライブラリは未定です。
+3 言語の併用自体を目的にせず、最小構成で始めます。現在の実装は Kotlin 2.3.21 / Java 25 ツールチェーン / Gradle 9.6.1（Kotlin DSL）です（[ADR 0003](docs/adr/0003-kotlin-jvm-toolchain.md)、Accepted）。Quarkus、Neo4j、LangChain4j、RDF / OWL / SHACL はまだ導入していません。Scala 3 は必要性が明確になってから検討します。LLM Provider、UI 技術、RDF 処理ライブラリは未定です。
 
 ## Repository Structure
 
@@ -226,7 +226,7 @@ MVP の「影響分析」は、登録された関係に基づく影響候補の�
 
 ### 1. モデルの定義
 
-- [x] 4 要素と 3 関係の語彙・意味を定義する（business-software Profile。ADR は Proposed）。
+- [x] 4 要素と 3 関係の語彙・意味を定義する（business-software Profile。ADR 0002 は Accepted）。
 - [ ] 安定 ID、出典、更新情報の扱いを決める（安定 ID と出典の文字列は実装済み。更新情報は未定）。
 - [ ] RDF / OWL と Property Graph のマッピングを定義する。
 - [ ] 最小限の SHACL 制約と架空企業データを用意する（架空データと、Core による型・端点の検証は実装済み。SHACL は未実装）。

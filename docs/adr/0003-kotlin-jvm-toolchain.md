@@ -1,6 +1,6 @@
 # 0003. Kotlin/JVM ツールチェーンとビルド構成
 
-- Status: Proposed
+- Status: Accepted（2026-09-25、PR #1 の承認をもって人間の Architect が承認）
 - Date: 2026-09-25
 
 ## Context
@@ -26,7 +26,7 @@ AGENTS.md は Kotlin/JVM を優先し、Java 25 を対象とし、Gradle Kotlin 
 ## Consequences
 
 - 開発者には JDK 25 が必要になる。Gradle の toolchain 自動プロビジョニングは設定していない。
-- README の「MVP は Java 中心」という記述は、この ADR が Accepted になった時点で更新する必要がある。
+- README の「MVP は Java 中心」という記述は、この ADR の承認に合わせて Kotlin 優先の記述に更新した。
 
 ## Validation / Migration
 
