@@ -7,4 +7,6 @@ include(
     "profiles:business-software",
     "examples:order-management",
     "applications:cli",
+    "adapters:neo4j",
+    "adapters:llm-langchain4j",
 )

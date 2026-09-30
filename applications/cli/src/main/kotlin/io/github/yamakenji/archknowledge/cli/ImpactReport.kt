@@ -5,7 +5,7 @@ import io.github.yamakenji.archknowledge.core.analysis.ImpactAnalysis
 import io.github.yamakenji.archknowledge.core.model.Concept
 
 object ImpactReport {
-    fun format(analysis: ImpactAnalysis): String = buildString {
+    fun format(analysis: ImpactAnalysis, includeProvenance: Boolean = false): String = buildString {
         val policy = analysis.policy
         appendLine("Start: ${label(analysis.start)}")
         appendLine(
@@ -35,6 +35,16 @@ object ImpactReport {
         appendLine()
         appendLine("Note: potential dependency impact derived from registered relations only;")
         appendLine("      it does not confirm actual business consequences.")
+        if (includeProvenance) {
+            appendLine("Provenance (registered evidence only):")
+            (listOf(analysis.start) + analysis.affected.map { it.concept }).forEach { concept ->
+                concept.provenance?.let { appendLine("  Concept ${concept.id} provenance: $it") }
+            }
+            analysis.affected.flatMap { it.evidence }.flatMap { it.steps }.map { it.relation }
+                .distinctBy { it.id }.sortedBy { it.id.value }.forEach { relation ->
+                    relation.provenance?.let { appendLine("  Relation ${relation.id} provenance: $it") }
+                }
+        }
     }
 
     private fun label(concept: Concept) = "${concept.id} [${concept.type}] ${concept.name}"

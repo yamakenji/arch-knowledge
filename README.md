@@ -7,7 +7,7 @@
 Business Analyst、Architect、AI Agent が同じ知識基盤を参照し、「ある Capability を変更すると何に影響するか」を、自然言語と根拠となるグラフの両方から確認できる環境を目指します。
 
 > **Status: Early Prototype**  
-> 現在実装されているのは、インメモリの企業モデルに対する決定的な影響分析と、それを実行する CLI だけです（[現在の実装](#現在の実装)を参照）。Neo4j、LLM、Quarkus、UI、RDF / OWL / SHACL は未実装で、以下のうちそれらに関する記述は構想です。ライセンスは未定です。
+> 現在実装されているのは、決定的な影響分析、CLI、Neo4j snapshot の保存・復元、LangChain4j による自然言語要求の解釈です（[現在の実装](#現在の実装)を参照）。分析は検証済みインメモリモデルで実行し、説明は結果を決定的に表示します。Quarkus、UI、RDF / OWL / SHACL は未実装です。ライセンスは未定です。
 
 ## 現在の実装
 
@@ -25,12 +25,17 @@ Business Analyst、Architect、AI Agent が同じ知識基盤を参照し、「�
 | `examples/order-management/` | 架空の Order Management データと期待結果（[README](examples/order-management/README.md)） |
 | `applications/cli/` | CLI（各モジュールの組み立てと結果の表示） |
 | `docs/adr/` | 設計判断（0001〜0003 は Accepted） |
+| `adapters/neo4j/` | 汎用 Concept / RELATION snapshot の保存・検証付き復元 |
+| `adapters/llm-langchain4j/` | OpenAI-compatible モデルによる要求解釈。グラフアクセスなし |
+| `deployment/` | ローカル Neo4j Compose 設定（[手順](deployment/README.md)） |
 
 依存は内向きのみです（application / profiles → core、examples → core・profiles、cli → すべて）。設計判断は次の ADR にまとめています。
 
 - [0001 メタモデル非依存の Core と初期モジュール構成](docs/adr/0001-metamodel-agnostic-core-and-module-layout.md)
 - [0002 影響分析のトラバーサルと根拠経路の意味論](docs/adr/0002-impact-traversal-and-evidence-semantics.md)
 - [0003 Kotlin/JVM ツールチェーンとビルド構成](docs/adr/0003-kotlin-jvm-toolchain.md)
+- [0005 Neo4j snapshot persistence (Proposed)](docs/adr/0005-neo4j-snapshot-persistence.md)
+- [0006 Application-owned impact interpretation (Proposed)](docs/adr/0006-application-owned-impact-interpretation.md)
 
 ### 影響分析の意味論（要約）
 
@@ -58,17 +63,45 @@ Business Analyst、Architect、AI Agent が同じ知識基盤を参照し、「�
 
 Windows では `.\gradlew.bat` を使います。`./gradlew :applications:cli:installDist` を実行すると、`applications/cli/build/install/arch-knowledge/bin/arch-knowledge` から直接実行できます。
 
-終了コードは、成功が `0`、Concept が存在しない場合や要求が不正な場合が `1`、引数の誤りが `2` です。
+既定のコマンドは引き続き同梱のインメモリサンプルを使い、Neo4j 設定は不要です。
 
-### テスト方法
+Neo4j を使う場合は環境変数 `NEO4J_URI`、`NEO4J_USERNAME`、`NEO4J_PASSWORD` を外部で設定してください。`NEO4J_DATABASE` は任意（既定 `neo4j`）です。認証情報をリポジトリやコマンド引数に保存しないでください。
+
+```bash
+./gradlew :applications:cli:run --args="neo4j import-example --replace"
+./gradlew :applications:cli:run --args="neo4j concepts"
+./gradlew :applications:cli:run --args="neo4j impact cap-order-management"
+./gradlew :applications:cli:run --args="neo4j impact cap-order-management --depth 2"
+```
+
+**破壊的操作:** `import-example --replace` は対象データベースの既存 `Concept` ノード（付随する関係を含む）と全 `RELATION` エッジを削除し、サンプルで置き換えます。専用データベース・単一 writer のみで使用してください。分析コマンドは保存済み snapshot を読み取り、Profile 検証後に同じ `AnalyzeImpact` を実行します。自動 import やインメモリへのフォールバックはしません。CLI が作成した driver は成功・失敗の両方で閉じます。
+
+Exit codes: `0` success; `1` missing concept or invalid analysis request; `2` argument or missing configuration error; `3` invalid stored snapshot; `4` Neo4j infrastructure failure. Use the installDist executable for the actual process exit code (Gradle run reports nonzero exits as build failures). Failure diagnostics omit connection details and credentials.
+
+### Natural-language CLI
+
+Explicitly configure `LLM_BASE_URL` (the trusted OpenAI-compatible API base URL), `LLM_MODEL`, and `LLM_API_KEY` outside version control. Only the question is sent to that endpoint; graph records, provenance, and database credentials are not sent. Questions themselves may contain sensitive information: use authorized data only. No model is called by structured commands.
+
+```bash
+./gradlew :applications:cli:run --args='ask "What may be affected if cap-order-management changes?"'
+./gradlew :applications:cli:run --args='neo4j ask "What may be affected if cap-order-management changes?"'
+```
+
+Only Capability impact requests are permitted. IDs resolve directly and names match exactly; ambiguous names return sorted candidates. Rerun the same question with `--select <conceptId>` to choose one; interpretation is repeated and stale or unrelated selections are rejected. Traversal is Profile-owned, not model-controlled. Malformed, unsupported, or unknown requests do not execute analysis. Exit `4` also covers model infrastructure failures; exit `1` covers rejected interpretations and ambiguity.
+
+Answers render registered concepts, evidence paths, and provenance deterministically; the model does not generate additional explanatory facts or execute Cypher. Live-model calls are optional manual checks via `ask`, require explicit environment configuration, and are not part of required tests. Required application/adapter/CLI tests use deterministic stubs and disposable infrastructure.
+
+### テストコマンド
 
 ```bash
 ./gradlew test           # 全モジュールのテスト
 ./gradlew build          # コンパイル + テスト（check を含む）
 ./gradlew :core:test     # モジュール単位（:application, :profiles:business-software, :examples:order-management, :applications:cli）
+./gradlew :applications:cli:test :adapters:neo4j:test
 ```
 
 フォーマッタや静的解析は、まだ設定していません。
+Neo4j adapter / CLI テストは disposable in-process Neo4j harness を使用し、Docker や外部 DB、認証情報は不要です。CLI テストは保存・復元後の完全な出力（順序・根拠経路・深さ制限の不完全表示）とインメモリ出力の一致、エラー分類を検証します。Compose サーバーの起動は別の手動確認です。
 
 ## Vision
 
@@ -212,7 +245,7 @@ MVP の「影響分析」は、登録された関係に基づく影響候補の�
 | RDF / OWL | 語彙と意味モデルの定義 |
 | SHACL | グラフデータの制約・品質検証 |
 
-3 言語の併用自体を目的にせず、最小構成で始めます。現在の実装は Kotlin 2.4.0 / Java 25 ツールチェーン / Gradle 9.6.1（Kotlin DSL）です（基本方針は [ADR 0003](docs/adr/0003-kotlin-jvm-toolchain.md)、Accepted。バージョン更新の記録は [ADR 0004](docs/adr/0004-kotlin-2-4-upgrade.md)、Proposed）。Gradle 自体に同梱される Kotlin 2.3.21 と、アプリケーションのコンパイルに使う Kotlin Gradle Plugin 2.4.0 は別です。Quarkus、Neo4j、LangChain4j、RDF / OWL / SHACL はまだ導入していません。Scala 3 は必要性が明確になってから検討します。LLM Provider、UI 技術、RDF 処理ライブラリは未定です。
+現在の実装は Kotlin 2.4.0 / Java 25 / Gradle 9.6.1 です（[ADR 0003](docs/adr/0003-kotlin-jvm-toolchain.md)、[ADR 0004](docs/adr/0004-kotlin-2-4-upgrade.md)）。Neo4j driver / harness は 5.26.0、LangChain4j OpenAI は 1.20.2 を使用します。Quarkus、RDF / OWL / SHACL、Scala、UI は未導入です。LLM は明示設定した OpenAI-compatible endpoint に接続します。
 
 ## Repository Structure
 
@@ -220,7 +253,7 @@ MVP の「影響分析」は、登録された関係に基づく影響候補の�
 
 ## Getting Started
 
-インメモリの影響分析は、[実行方法](#実行方法)の手順でそのまま試せます。Neo4j、LLM Provider、認証情報の設定手順は、それらの統合を実装した時点で追加します。認証情報はリポジトリに含めず、サンプルには架空のデータを使います。
+インメモリの影響分析は、[実行方法](#実行方法)の手順でそのまま試せます。Neo4j と LLM の設定は同節と Natural-language CLI を参照してください。認証情報はリポジトリに含めず、サンプルには架空のデータを使います。
 
 ## Roadmap / MVP
 
@@ -233,16 +266,16 @@ MVP の「影響分析」は、登録された関係に基づく影響候補の�
 
 ### 2. グラフの取り込み・検索
 
-- [ ] 検証付きのサンプルデータ取り込みを実装する（インメモリのデータを Profile で検証する部分は実装済み。ファイルや Neo4j からの取り込みは未実装）。
-- [x] Capability を起点とする読み取り専用検索を実装する（インメモリ。Neo4j は未実装）。
+- [x] Profile-validated sample import and Neo4j snapshot restoration (file import remains out of scope).
+- [x] Read-only Capability impact analysis over in-memory or restored Neo4j snapshots.
 - [ ] 到達要素と根拠経路を返す API を用意する（ユースケースと CLI は実装済み。サーバー API は未実装）。
 
 ### 3. 自然言語による問い合わせ
 
-- [ ] LangChain4j から検索機能を呼び出す。
-- [ ] Capability の曖昧性解消と未登録時の応答を実装する。
-- [ ] 出典・経路付きで影響候補を説明する。
-- [ ] 質問と期待結果のセットで回答を評価する。
+- [x] Validated LangChain4j interpretation invokes the shared analysis use case.
+- [x] Capability ambiguity and unknown concepts have explicit outcomes.
+- [x] Deterministic answers show evidence paths and provenance.
+- [x] Stub tests compare natural-language and structured requests; live evaluation is optional.
 
 ### MVP の完了条件
 
