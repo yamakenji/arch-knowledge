@@ -212,7 +212,7 @@ MVP の「影響分析」は、登録された関係に基づく影響候補の�
 | RDF / OWL | 語彙と意味モデルの定義 |
 | SHACL | グラフデータの制約・品質検証 |
 
-3 言語の併用自体を目的にせず、最小構成で始めます。現在の実装は Kotlin 2.3.21 / Java 25 ツールチェーン / Gradle 9.6.1（Kotlin DSL）です（[ADR 0003](docs/adr/0003-kotlin-jvm-toolchain.md)、Accepted）。Quarkus、Neo4j、LangChain4j、RDF / OWL / SHACL はまだ導入していません。Scala 3 は必要性が明確になってから検討します。LLM Provider、UI 技術、RDF 処理ライブラリは未定です。
+3 言語の併用自体を目的にせず、最小構成で始めます。現在の実装は Kotlin 2.4.0 / Java 25 ツールチェーン / Gradle 9.6.1（Kotlin DSL）です（基本方針は [ADR 0003](docs/adr/0003-kotlin-jvm-toolchain.md)、Accepted。バージョン更新の記録は [ADR 0004](docs/adr/0004-kotlin-2-4-upgrade.md)、Proposed）。Gradle 自体に同梱される Kotlin 2.3.21 と、アプリケーションのコンパイルに使う Kotlin Gradle Plugin 2.4.0 は別です。Quarkus、Neo4j、LangChain4j、RDF / OWL / SHACL はまだ導入していません。Scala 3 は必要性が明確になってから検討します。LLM Provider、UI 技術、RDF 処理ライブラリは未定です。
 
 ## Repository Structure
 

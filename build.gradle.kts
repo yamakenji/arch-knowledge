@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
 plugins {
-    kotlin("jvm") version "2.3.21" apply false
+    kotlin("jvm") version "2.4.0" apply false
 }
 
 // Intermediate directories (profiles, examples, applications) are containers, not Kotlin modules.
